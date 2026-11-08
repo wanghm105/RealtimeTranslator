@@ -1,6 +1,6 @@
 # RealtimeTranslator
 
-[English](README.md) | 简体中文
+[中文主页](README.md) | [English](README.en.md)
 
 RealtimeTranslator 是一个面向 Windows 课堂场景的字幕工具原型。它将英文语音转成文字，并在浏览器中显示英文字幕和中文翻译。项目使用现有的语音识别和语言模型，没有训练新模型。
 

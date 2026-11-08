@@ -1,52 +1,52 @@
 # RealtimeTranslator
 
-English | [简体中文](README.zh-CN.md)
+简体中文 | [English](README.en.md)
 
-RealtimeTranslator is a Windows classroom captioning prototype. It transcribes English speech and displays the English text alongside a Chinese translation in your browser. The project uses existing speech recognition and language models; it does not train a new model.
+RealtimeTranslator 是一个面向 Windows 课堂场景的字幕工具原型。它将英文语音转成文字，并在浏览器中显示英文字幕和中文翻译。项目使用现有的语音识别和语言模型，没有训练新模型。
 
 ```text
-Microphone / supported loopback input
-  -> voice activity detection -> faster-whisper transcription
-  -> sentence merging -> Qwen translation -> WebSocket -> browser captions
+麦克风 / 支持的系统声音输入
+  -> 语音活动检测 -> faster-whisper 语音识别
+  -> 句子合并 -> Qwen 翻译 -> WebSocket -> 浏览器字幕
 ```
 
-## Features
+## 功能
 
-- Shows partial English captions and streams the Chinese translation. Recent captions reappear after a browser refresh.
-- Keeps the translation queue bounded so newer captions take priority when translation falls behind. Some captions may be dropped under load.
-- Lets you adjust sentence merging, terminology, model selection and local caption saving.
-- Includes an optional NLLB translation path that requires separately prepared model files.
+- 显示实时英文字幕和流式中文字幕；刷新浏览器后可以恢复最近的字幕。
+- 限制翻译队列长度。翻译跟不上时优先处理较新的字幕，积压严重时可能会丢掉部分字幕。
+- 可以调整句子合并、术语、模型选择和本地字幕保存设置。
+- 提供可选的 NLLB 翻译方式，需要另外准备模型文件。
 
-## Requirements and setup
+## 环境与安装
 
-The original setup uses Windows, Python 3 and an NVIDIA CUDA GPU. Memory use and speed depend on the models, drivers and workload. A clean installation on another computer has not yet been verified. The application downloads model files on first use, so allow time and disk space. Check the licenses and terms of the models and dependencies you use.
+原有环境使用 Windows、Python 3 和 NVIDIA CUDA 显卡。显存占用和速度取决于模型、驱动和使用情况，目前还没有在另一台干净的电脑上验证过安装过程。程序首次运行时会下载模型，请预留时间和磁盘空间。使用前请查看所选模型及依赖的许可证和使用条款。
 
-1. Install Python and a compatible NVIDIA driver. `install.bat` creates a virtual environment and installs a CUDA 12.8 PyTorch build and the packages in `requirements.txt`. You may need a different PyTorch build for your GPU and driver; see [PyTorch installation](https://pytorch.org/get-started/locally/).
-2. Review and run `install.bat` from the project directory.
-3. Run `start.bat` and select an available audio input. If the browser does not open, go to `http://127.0.0.1:18090`. Close both the server and translator windows to stop the application.
+1. 安装 Python 和兼容的 NVIDIA 驱动。`install.bat` 会创建虚拟环境，安装 CUDA 12.8 版本的 PyTorch 以及 `requirements.txt` 中的依赖。你的显卡和驱动可能需要其他版本，请参考 [PyTorch 安装说明](https://pytorch.org/get-started/locally/)。
+2. 在项目目录中查看并运行 `install.bat`。
+3. 运行 `start.bat`，选择可用的音频输入。如果浏览器没有自动打开，请访问 `http://127.0.0.1:18090`。关闭服务端和翻译端两个窗口即可停止程序。
 
-You can also run `.venv\Scripts\python.exe realtime_server.py` and `.venv\Scripts\python.exe main.py` in separate terminals. The default ports are 18090, 8765 and 8766. The browser page currently assumes WebSocket port 8765, so if you change that port in `config.py`, also update `web/index.html`.
+你也可以在两个终端中分别运行 `.venv\Scripts\python.exe realtime_server.py` 和 `.venv\Scripts\python.exe main.py`。默认端口为 18090、8765 和 8766。网页目前固定使用 WebSocket 端口 8765；如果在 `config.py` 中更改该端口，也需要更新 `web/index.html`。
 
-## Configuration and privacy
+## 配置与隐私
 
-Edit `config.py` to change the speech recognition, translation or audio settings. The application can choose a Qwen model based on available GPU power and memory, and it may disable translation when resources are limited. You can add terminology to `glossary.txt`.
+在 `config.py` 中可以调整语音识别、翻译和音频设置。程序可以根据 GPU 的可用功耗和显存选择 Qwen 模型；资源不足时可能关闭翻译。术语可以添加到 `glossary.txt` 中。
 
-Caption saving is enabled by default. Files are written to `subtitles/` and may contain private or copyrighted material. Obtain any necessary permission before recording or sharing them. `.gitignore` excludes local captions, model weights, the virtual environment and device preferences from Git.
+字幕默认保存到 `subtitles/`。字幕可能包含私人信息或受版权保护的内容，录制或分享前请取得必要的许可。`.gitignore` 会将本地字幕、模型文件、虚拟环境和设备选择排除在 Git 之外。
 
-The server listens on `127.0.0.1` by default, so it is accessible only from the same computer. It has no authentication or encryption. Changing `HOST` to `0.0.0.0` makes captions and control endpoints accessible to devices that can reach it. On a trusted network, other clients may still read or clear captions and send messages. Do not expose the server to the public internet.
+服务端默认监听 `127.0.0.1`，只有本机可以访问。服务没有身份验证或加密。如果将 `HOST` 改成 `0.0.0.0`，能够连接到服务的设备就可以访问字幕和控制接口。即使在可信网络中，其他客户端仍可能读取、清空字幕或发送消息。请勿将服务暴露到公共互联网。
 
-## Current limitations
+## 当前限制
 
-- The configured translation direction is primarily English to Chinese. Accuracy and latency depend on the audio, models and hardware; no formal benchmark is included.
-- Streaming may miss captions if a queue overflows or the application is interrupted. It is not guaranteed to produce a complete transcript.
-- To use NLLB, run `python download_nllb.py` and `python convert_nllb.py` to prepare files in `models/`. Check the model license before use.
-- The code loads Hugging Face model components with `trust_remote_code=True`. Review model sources before downloading or running them.
-- Dependency versions are not locked. Installation and GPU operation still need testing on a clean machine.
+- 默认配置主要用于英文翻译成中文。准确率和延迟取决于音频、模型和硬件，目前没有正式的基准测试结果。
+- 队列溢出或程序中断时，流式处理可能遗漏字幕，不能保证得到完整的文字记录。
+- 使用 NLLB 时，先运行 `python download_nllb.py` 和 `python convert_nllb.py`，在 `models/` 中准备文件。使用前请查看模型许可证。
+- 代码通过 `trust_remote_code=True` 加载 Hugging Face 模型组件，下载或运行前请检查模型来源。
+- 依赖版本尚未锁定，安装流程和 GPU 运行还需要在干净的电脑上测试。
 
-## Project layout
+## 项目结构
 
-`main.py` coordinates audio, recognition and translation. `realtime_server.py` serves the page and relays captions. The pipeline components are in `audio/`, `speech/`, `core/` and `translation/`; the caption interface is `web/index.html`.
+`main.py` 负责协调音频、识别和翻译；`realtime_server.py` 提供网页并转发字幕。处理流程的组件位于 `audio/`、`speech/`、`core/` 和 `translation/`，字幕页面为 `web/index.html`。
 
-## License
+## 许可证
 
-No project license has been selected yet. Third-party models and dependencies have their own licenses.
+项目尚未选择许可证。第三方模型和依赖各有自己的许可证。
