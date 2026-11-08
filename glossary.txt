@@ -1,0 +1,2 @@
+# Add one English -> Chinese term per line.
+assignment -> 作业

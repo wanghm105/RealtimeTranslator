@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0d0f12">
+<title>课堂实时翻译</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231a6dd6'/%3E%3Ctext x='50' y='70' font-size='56' text-anchor='middle' fill='white' font-family='sans-serif'%3E%E8%AF%91%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+    color-scheme:dark;
+    --bg:#0d0f12;
+    --card:#16181d;
+    --card-current:#1b2230;
+    --text:#f2f4f7;
+    --zh:#ffffff;
+    --en:#9aa6b2;
+    --dim:#5c6670;
+    --accent:#4d9fff;
+    --fs-zh:30px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;}
+body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    height:100vh;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+    -webkit-tap-highlight-color:transparent;
+}
+
+/* 可见焦点环（键盘导航） */
+a:focus-visible,button:focus-visible{
+    outline:2px solid var(--accent);
+    outline-offset:2px;
+}
+
+/* 跳转链接：仅键盘聚焦时可见 */
+.skip-link{
+    position:absolute;left:12px;top:-60px;
+    background:var(--accent);color:#04101f;
+    padding:8px 14px;border-radius:8px;font-size:14px;
+    text-decoration:none;z-index:20;transition:top .2s;
+}
+.skip-link:focus-visible{top:12px;}
+
+/* ============ 顶栏 ============ */
+#topbar{
+    flex-shrink:0;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:10px calc(18px + env(safe-area-inset-right)) 10px calc(18px + env(safe-area-inset-left));
+    background:#12151a;
+    border-bottom:1px solid #23272e;
+    user-select:none;
+}
+.brand{
+    display:flex;align-items:center;gap:10px;min-width:0;
+    font-size:16px;font-weight:600;margin:0;
+    text-wrap:balance;
+}
+.logo{
+    width:28px;height:28px;border-radius:8px;
+    background:#1a6dd6;color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-size:16px;font-weight:700;flex-shrink:0;
+}
+.title{font-size:16px;font-weight:600;white-space:nowrap;}
+#chip{
+    font-size:12px;padding:3px 10px;border-radius:999px;
+    white-space:nowrap;
+    transition:background .3s, color .3s;
+}
+.chip-idle{background:#23272e;color:#9aa6b2;}
+.chip-listen{background:#0f3a24;color:#4ade80;}
+.chip-trans{background:#3a2c08;color:#fbbf24;}
+.chip-off{background:#3a1114;color:#f87171;}
+.controls{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
+button{
+    touch-action:manipulation;
+    font-family:inherit;
+    cursor:pointer;
+}
+#clock{
+    font-size:13px;color:var(--en);
+    background:transparent;border:1px solid transparent;border-radius:8px;
+    padding:5px 8px;font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+#clock:hover{color:var(--text);background:#1e232a;}
+button.ctrl{
+    background:#1e232a;color:#c6d0da;border:1px solid #2c333d;
+    border-radius:8px;padding:5px 10px;font-size:13px;
+    white-space:nowrap;
+}
+button.ctrl:hover{background:#28303a;color:#fff;}
+button.ctrl:active{background:#12161c;color:#9fb2c6;}
+button.ctrl.on{background:#16304d;border-color:#2f6ab8;color:#bfe0ff;}
+button.ctrl.danger{
+    background:#4d1417;border-color:#a03038;color:#ffd7d7;
+    animation:blinkBg 1s steps(2) infinite;
+}
+@keyframes blinkBg{50%{opacity:.65;}}
+
+/* ============ 历史字幕 ============ */
+#history{
+    flex:1;
+    overflow-y:auto;
+    overscroll-behavior-y:contain;
+    padding:22px calc(4vw + env(safe-area-inset-right)) 10px calc(4vw + env(safe-area-inset-left));
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+    scroll-behavior:smooth;
+}
+.card{
+    background:var(--card);
+    border:1px solid #20242b;
+    border-radius:12px;
+    padding:12px 20px 14px;
+    transition:opacity .4s, background .3s, border-color .3s;
+}
+.card-head{
+    display:flex;justify-content:flex-end;
+    margin-bottom:2px;
+}
+.card .time{font-size:11px;color:#4a525c;font-variant-numeric:tabular-nums;}
+.card .en{
+    font-size:calc(var(--fs-zh) * 0.55);
+    color:var(--en);
+    line-height:1.5;
+}
+.card .zh{
+    margin-top:4px;
+    font-size:var(--fs-zh);
+    color:var(--zh);
+    font-weight:600;
+    line-height:1.55;
+    overflow-wrap:anywhere;
+}
+.card.current{
+    background:var(--card-current);
+    border-color:var(--accent);
+}
+.card.current .en{color:#b7c4d4;}
+.zh.pending::after{content:"▍";color:var(--accent);animation:blink 1s steps(2) infinite;margin-left:2px;}
+.zh.pending:empty::before{content:"翻译中…";color:#64748b;font-weight:400;}
+@keyframes blink{50%{opacity:0;}}
+
+#empty{
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:10px;pointer-events:none;text-align:center;padding:0 30px;
+}
+#empty .big{font-size:26px;color:#4a545f;margin:0;}
+#empty .small{font-size:14px;color:#39414a;margin:0;}
+
+/* ============ 底部实时区 ============ */
+#live{
+    flex-shrink:0;
+    background:#14171c;
+    border-top:1px solid #262b33;
+    padding:12px calc(4vw + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(4vw + env(safe-area-inset-left));
+}
+.live-meta{
+    display:flex;align-items:center;gap:7px;
+    font-size:12px;color:var(--dim);
+    margin-bottom:4px;
+}
+#dot{
+    width:8px;height:8px;border-radius:50%;
+    background:#3a424c;
+    transition:background .3s;
+    transform-origin:center;
+}
+#dot.listen{background:#4ade80;animation:pulse 1.2s ease-in-out infinite;}
+#dot.trans{background:#fbbf24;animation:pulse 1.2s ease-in-out infinite;}
+@keyframes pulse{50%{transform:scale(1.9);}}
+#liveEn{
+    font-size:calc(var(--fs-zh) * 0.72);
+    color:#dfe6ee;font-weight:600;line-height:1.5;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+    overflow:hidden;min-height:calc(var(--fs-zh) * 0.72 * 1.5);
+}
+#liveEn.placeholder{color:#3d4650;font-weight:400;}
+#liveEn.placeholder:empty::before{content:"等待语音…";}
+
+#scrollHint{
+    position:fixed;right:24px;bottom:130px;
+    background:#1e5caf;color:#fff;border:none;border-radius:999px;
+    padding:8px 16px;font-size:13px;display:none;
+    box-shadow:0 4px 14px rgba(0,0,0,.4);
+}
+#scrollHint:hover{background:#2569c9;}
+#scrollHint:active{background:#174a8c;}
+
+/* ============ 专注模式 ============ */
+body.focus #topbar{
+    opacity:0;pointer-events:none;transition:opacity .3s;
+    position:absolute;top:0;left:0;right:0;z-index:5;
+}
+body.focus:hover #topbar{opacity:1;pointer-events:auto;}
+body.focus #history{justify-content:center;padding-top:8vh;padding-bottom:8vh;}
+body.focus .card{display:none;}
+body.focus .card:last-child{display:block;}
+body.focus #live{background:transparent;border-top:none;padding-bottom:6vh;}
+body.focus #liveEn{display:none;}
+body.focus .live-meta{justify-content:center;}
+
+/* ============ 隐藏英文 ============ */
+body.noen .card .en{display:none;}
+body.noen #liveEn{display:none;}
+
+/* ============ 帮助弹窗 ============ */
+#helpOverlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.6);
+    display:flex;align-items:center;justify-content:center;z-index:10;
+    overscroll-behavior:contain;
+}
+#helpOverlay[hidden]{display:none;}
+.helpBox{
+    background:#171b21;border:1px solid #2c333d;border-radius:14px;
+    padding:24px 28px;max-width:420px;width:90%;
+    max-height:80vh;overflow-y:auto;
+}
+.helpBox h2{font-size:17px;margin-bottom:12px;text-wrap:balance;}
+.helpBox table{width:100%;border-collapse:collapse;font-size:13px;}
+.helpBox td{padding:5px 4px;border-bottom:1px solid #22272f;color:#c6d0da;}
+.helpBox td:first-child{
+    color:#9fc7ff;font-family:Consolas,monospace;white-space:nowrap;
+    padding-right:14px;width:110px;
+}
+.helpBox button{
+    margin-top:14px;width:100%;background:#1e5caf;color:#fff;
+    border:none;border-radius:8px;padding:8px;cursor:pointer;font-size:14px;
+}
+.helpBox button:hover{background:#2569c9;}
+.helpBox button:active{background:#174a8c;}
+
+/* ============ 减弱动效 ============ */
+@media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{
+        animation-duration:.01ms !important;
+        animation-iteration-count:1 !important;
+        transition-duration:.01ms !important;
+    }
+    #history{scroll-behavior:auto;}
+}
+
+@media (max-width:720px){
+    :root{--fs-zh:24px;}
+    #clock{display:none;}
+    .title{display:none;}
+    #history{padding:16px calc(12px + env(safe-area-inset-right)) 8px calc(12px + env(safe-area-inset-left));}
+    #live{padding:10px calc(12px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));}
+}
+</style>
+</head>
+<body>
+
+<a class="skip-link" href="#history">跳到字幕内容</a>
+
+<header id="topbar">
+    <h1 class="brand" translate="no">
+        <span class="logo" aria-hidden="true">译</span>
+        <span class="title">课堂实时翻译</span>
+        <span id="chip" class="chip chip-off" aria-live="polite">连接中…</span>
+    </h1>
+    <div class="controls">
+        <button id="clock" type="button"
+                title="点击切换：当前时间 / 课时计时"
+                aria-label="点击切换：当前时间或课时计时"></button>
+        <button class="ctrl" id="btnFocus" type="button" title="专注模式 (Z)：只显示最新一句"
+                aria-label="专注模式，只显示最新一句（快捷键 Z）">专注</button>
+        <button class="ctrl on" id="btnEn" type="button" title="显示/隐藏英文 (E)"
+                aria-label="显示或隐藏英文（快捷键 E）">EN</button>
+        <button class="ctrl" id="btnFontDown" type="button" title="缩小字号 (-)"
+                aria-label="缩小字幕字号（快捷键 -）">A−</button>
+        <button class="ctrl" id="btnFontUp" type="button" title="放大字号 (+)"
+                aria-label="放大字幕字号（快捷键 +）">A＋</button>
+        <button class="ctrl" id="btnFull" type="button" title="全屏 (F)"
+                aria-label="全屏（快捷键 F）">⛶</button>
+        <button class="ctrl" id="btnClear" type="button" title="清空字幕 (C)"
+                aria-label="清空所有字幕（快捷键 C）">清空</button>
+        <button class="ctrl" id="btnHelp" type="button" title="快捷键 (?)"
+                aria-label="查看快捷键（快捷键 ?）">?</button>
+    </div>
+</header>
+
+<main id="history" role="log" aria-live="polite" aria-label="字幕记录"></main>
+
+<div id="empty">
+    <p class="big">等待老师开始讲话…</p>
+    <p class="small">中文字幕会实时出现在这里 · 按 F 全屏 · 按 Z 专注模式</p>
+</div>
+
+<section id="live" aria-label="实时字幕">
+    <div class="live-meta">
+        <span id="dot" aria-hidden="true"></span>
+        <span id="liveLabel">实时</span>
+    </div>
+    <div id="liveEn" class="placeholder" aria-live="polite"></div>
+</section>
+
+<button id="scrollHint" type="button" aria-label="回到最新字幕">↓ 回到底部</button>
+
+<div id="helpOverlay" hidden>
+    <div class="helpBox" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+        <h2 id="helpTitle">快捷键</h2>
+        <table>
+            <tr><td>F</td><td>全屏 / 退出全屏</td></tr>
+            <tr><td>Z</td><td>专注模式（只显示最新一句）</td></tr>
+            <tr><td>E</td><td>显示 / 隐藏英文</td></tr>
+            <tr><td>+&nbsp;/&nbsp;−</td><td>放大 / 缩小字号</td></tr>
+            <tr><td>C</td><td>清空字幕</td></tr>
+            <tr><td>↑&nbsp;↓&nbsp;PgUp&nbsp;PgDn</td><td>翻阅历史字幕</td></tr>
+            <tr><td>?</td><td>本帮助</td></tr>
+            <tr><td>Esc</td><td>关闭帮助</td></tr>
+        </table>
+        <button id="helpClose" type="button" aria-label="关闭帮助">关闭 (Esc)</button>
+    </div>
+</div>
+
+<script>
+"use strict";
+
+const historyEl = document.getElementById("history");
+const emptyEl = document.getElementById("empty");
+const liveEn = document.getElementById("liveEn");
+const liveLabel = document.getElementById("liveLabel");
+const dot = document.getElementById("dot");
+const chip = document.getElementById("chip");
+const clockEl = document.getElementById("clock");
+const scrollHint = document.getElementById("scrollHint");
+const helpOverlay = document.getElementById("helpOverlay");
+const btnFocus = document.getElementById("btnFocus");
+const btnEn = document.getElementById("btnEn");
+const btnClear = document.getElementById("btnClear");
+const btnFull = document.getElementById("btnFull");
+const helpClose = document.getElementById("helpClose");
+
+const WS_PORT = 8765;
+const MAX_CARDS = 200;
+const SCROLL_THRESHOLD = 60;
+
+const cards = new Map();   // seq -> {el, enEl, zhEl}
+let currentSeq = null;     // 正在流式翻译的句子
+let stickToBottom = true;  // 是否跟随最新字幕
+let autoScrolling = false; // 程序化滚动进行中（期间不改写 stickToBottom）
+let autoScrollTimer = null;
+let ws = null;
+let reconnectTimer = null;
+let clockMode = "time";    // time | elapsed
+const pageLoadTime = Date.now();
+
+const WS_URL = "ws://" + (location.hostname || "localhost") + ":" + WS_PORT;
+
+/* ================= 连接 ================= */
+
+function connect(){
+    ws = new WebSocket(WS_URL);
+
+    ws.onopen = () => {
+        chip.textContent = "已连接";
+        chip.className = "chip chip-idle";
+    };
+
+    ws.onmessage = (event) => {
+        let d;
+        try { d = JSON.parse(event.data); } catch (e) { return; }
+        handleMessage(d);
+    };
+
+    ws.onclose = () => {
+        chip.textContent = "已断开 · 自动重连中（可刷新页面）";
+        chip.className = "chip chip-off";
+        setDot("off");
+        reconnect();
+    };
+
+    ws.onerror = () => { try { ws.close(); } catch (e) {} };
+}
+
+function reconnect(){
+    if (reconnectTimer) return;
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connect();
+    }, 3000);
+}
+
+/* ================= 消息处理 ================= */
+
+function handleMessage(d){
+    switch (d.type) {
+
+        case "history":
+            clearAll();
+            (d.items || []).forEach(it => addCard(null, it.en, it.zh, {done:true}));
+            break;
+
+        case "clear":
+            disarmClear();
+            clearAll();
+            break;
+
+        case "status":
+            setStatus(d.status);
+            break;
+
+        case "partial":
+            liveEn.textContent = d.en || "";
+            liveEn.classList.toggle("placeholder", !d.en);
+            break;
+
+        case "final_start":
+            liveEn.textContent = "";
+            liveEn.classList.add("placeholder");
+            currentSeq = d.seq;
+            addCard(d.seq, d.en, "", {pending:true});
+            break;
+
+        case "final_zh":
+            if (d.seq === currentSeq) {
+                const c = cards.get(d.seq);
+                if (c) {
+                    c.zhEl.textContent = d.zh || "";
+                    // 流式翻译让卡片不断长高，跟随状态下保持底部可见
+                    if (stickToBottom) scrollBottom(true);
+                }
+            }
+            break;
+
+        case "final":
+            if (d.seq === currentSeq) currentSeq = null;
+            liveEn.textContent = "";
+            liveEn.classList.add("placeholder");
+            // zh 缺失/null = 未启用本地翻译（用网页插件翻译），中文区留空；
+            // zh 为空字符串 = 本地翻译失败
+            const zhText = (d.zh == null) ? "" : (d.zh || "（翻译失败）");
+            addCard(d.seq, d.en, zhText, {done:true});
+            break;
+    }
+}
+
+/* ================= 字幕卡片 ================= */
+
+// Intl 格式化当前时间（避免硬编码格式）
+const timeFmt = new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+});
+
+function hhmmss(){
+    return timeFmt.format(new Date());
+}
+
+function addCard(seq, en, zh, opts = {}){
+    let card = (seq != null) ? cards.get(seq) : null;
+
+    if (!card) {
+        const el = document.createElement("div");
+        el.className = "card";
+
+        const head = document.createElement("div");
+        head.className = "card-head";
+        const time = document.createElement("span");
+        time.className = "time";
+        time.textContent = hhmmss();
+
+        const enEl = document.createElement("div");
+        enEl.className = "en";
+        enEl.textContent = en || "";
+
+        const zhEl = document.createElement("div");
+        zhEl.className = "zh";
+        zhEl.textContent = zh || "";
+
+        head.appendChild(time);
+        el.appendChild(head);
+        el.appendChild(enEl);
+        el.appendChild(zhEl);
+        historyEl.appendChild(el);
+
+        card = { el, enEl, zhEl };
+        if (seq != null) cards.set(seq, card);
+    } else {
+        if (en) card.enEl.textContent = en;
+        if (zh) {
+            card.zhEl.textContent = zh;
+            card.zhEl.classList.remove("pending");
+            card.el.classList.remove("current");
+        }
+    }
+
+    if (opts.pending) {
+        card.zhEl.textContent = "";
+        card.zhEl.classList.add("pending");
+        card.el.classList.add("current");
+    }
+
+    if (opts.done) {
+        card.zhEl.classList.remove("pending");
+        card.el.classList.remove("current");
+    }
+
+    while (historyEl.children.length > MAX_CARDS) {
+        const first = historyEl.firstChild;
+        for (const [k, v] of cards) {
+            if (v.el === first) { cards.delete(k); break; }
+        }
+        first.remove();
+    }
+
+    emptyEl.style.display = "none";
+    updateOpacities();
+
+    if (stickToBottom) scrollBottom();
+}
+
+function updateOpacities(){
+    const els = historyEl.children;
+    const n = els.length;
+    for (let i = 0; i < n; i++) {
+        const el = els[i];
+        if (el.classList.contains("current")) {
+            el.style.opacity = 1;
+        } else {
+            const dist = n - 1 - i;
+            el.style.opacity = Math.max(0.3, 1 - dist * 0.14);
+        }
+    }
+}
+
+function clearAll(){
+    historyEl.innerHTML = "";
+    cards.clear();
+    currentSeq = null;
+    emptyEl.style.display = "flex";
+}
+
+/* ================= 状态 / 滚动 ================= */
+
+function setStatus(s){
+    const map = {
+        idle:       ["待机",  "chip-idle"],
+        listening:  ["聆听中","chip-listen"],
+        translating:["翻译中","chip-trans"],
+    };
+    const m = map[s];
+    if (m) {
+        chip.textContent = m[0];
+        chip.className = "chip " + m[1];
+    }
+    setDot(s);
+    liveLabel.textContent = (s === "listening") ? "聆听中" :
+                            (s === "translating") ? "翻译中" : "实时";
+}
+
+function setDot(s){
+    const cls = (s === "listening") ? "listen" :
+                (s === "translating") ? "trans" : "";
+    dot.className = cls;
+}
+
+function isNearBottom(){
+    return (historyEl.scrollHeight - historyEl.scrollTop - historyEl.clientHeight) < SCROLL_THRESHOLD;
+}
+
+function prefersReducedMotion(){
+    try {
+        return matchMedia("(prefers-reduced-motion: reduce)").matches;
+    } catch (e) {
+        return false;
+    }
+}
+
+function scrollBottom(forceInstant){
+    // 程序化滚动到最新：明确保持跟随状态，
+    // 并在动画期间屏蔽 scroll 事件对 stickToBottom 的改写
+    stickToBottom = true;
+    autoScrolling = true;
+    if (autoScrollTimer) {
+        clearTimeout(autoScrollTimer);
+        autoScrollTimer = null;
+    }
+    // 减动效用户 / 页面隐藏时直接瞬时跳转（CSS scroll-behavior:smooth
+    // 会把 behavior:"auto" 也解析成平滑滚动，隐藏标签里会被浏览器延迟）
+    const instant = forceInstant || prefersReducedMotion() || document.hidden;
+    historyEl.scrollTo({
+        top: historyEl.scrollHeight,
+        behavior: instant ? "instant" : "smooth",
+    });
+    // 兜底：scrollend 未触发时（后台标签等）恢复
+    autoScrollTimer = setTimeout(() => { autoScrolling = false; }, 800);
+}
+
+historyEl.addEventListener("scrollend", () => {
+    autoScrolling = false;
+    if (autoScrollTimer) {
+        clearTimeout(autoScrollTimer);
+        autoScrollTimer = null;
+    }
+});
+
+historyEl.addEventListener("scroll", () => {
+    if (autoScrolling) return;   // 自动滚动过程中不改写跟随状态
+    stickToBottom = isNearBottom();
+    scrollHint.style.display = stickToBottom ? "none" : "block";
+});
+
+scrollHint.addEventListener("click", () => {
+    stickToBottom = true;
+    scrollBottom();
+    scrollHint.style.display = "none";
+});
+
+/* ================= 字号 ================= */
+
+const MIN_FONT = 16, MAX_FONT = 84;
+const DEFAULT_FONT = 30;
+
+function currentFont(){
+    const px = parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue("--fs-zh")
+    );
+    return (px >= MIN_FONT && px <= MAX_FONT) ? px : DEFAULT_FONT;
+}
+
+function setFont(px){
+    px = Math.min(MAX_FONT, Math.max(MIN_FONT, px));
+    document.documentElement.style.setProperty("--fs-zh", px + "px");
+    try { localStorage.setItem("rtFont", String(px)); } catch (e) {}
+    syncURL();
+}
+
+function changeFont(delta){
+    setFont(currentFont() + delta);
+}
+
+/* ================= 全屏 / 模式 ================= */
+
+function toggleFullscreen(){
+    if (document.fullscreenElement) {
+        document.exitFullscreen();
+    } else {
+        document.documentElement.requestFullscreen().catch(() => {});
+    }
+}
+
+document.addEventListener("fullscreenchange", () => {
+    btnFull.classList.toggle("on", !!document.fullscreenElement);
+});
+
+function toggleFocus(force){
+    const on = (force !== undefined)
+        ? force
+        : !document.body.classList.contains("focus");
+    document.body.classList.toggle("focus", on);
+    btnFocus.classList.toggle("on", on);
+    if (stickToBottom) scrollBottom();
+    syncURL();
+}
+
+function toggleEn(force){
+    const hide = (force !== undefined)
+        ? force
+        : !document.body.classList.contains("noen");
+    document.body.classList.toggle("noen", hide);
+    btnEn.classList.toggle("on", !hide);
+    try {
+        localStorage.setItem("rtNoEn", hide ? "1" : "0");
+    } catch (e) {}
+    syncURL();
+}
+
+/* ================= URL 状态同步（深链接） ================= */
+
+function syncURL(){
+    const p = new URLSearchParams();
+    if (document.body.classList.contains("focus")) p.set("focus", "1");
+    if (document.body.classList.contains("noen")) p.set("noen", "1");
+    const f = currentFont();
+    if (f !== DEFAULT_FONT) p.set("font", String(f));
+    const q = p.toString();
+    try {
+        history.replaceState(null, "",
+            location.pathname + (q ? "?" + q : ""));
+    } catch (e) {}
+}
+
+function applyURLParams(){
+    let p;
+    try { p = new URLSearchParams(location.search); } catch (e) { return; }
+
+    if (p.has("focus")) toggleFocus(p.get("focus") === "1");
+    if (p.has("noen")) toggleEn(p.get("noen") === "1");
+    if (p.has("font")) {
+        const f = parseInt(p.get("font"), 10);
+        if (f >= MIN_FONT && f <= MAX_FONT) setFont(f);
+    }
+}
+
+/* ================= 清空（两步确认） ================= */
+
+let clearArmed = false;
+let clearTimer = null;
+
+function disarmClear(){
+    clearArmed = false;
+    if (clearTimer) { clearTimeout(clearTimer); clearTimer = null; }
+    btnClear.classList.remove("danger");
+    btnClear.textContent = "清空";
+}
+
+function clearSubtitles(){
+    if (!clearArmed) {
+        clearArmed = true;
+        btnClear.classList.add("danger");
+        btnClear.textContent = "确认清空?";
+        clearTimer = setTimeout(disarmClear, 4000);
+        return;
+    }
+    disarmClear();
+    clearAll();
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "clear" }));
+    }
+}
+
+/* ================= 时钟 / 课时计时 ================= */
+
+function fmtElapsed(ms){
+    const s = Math.floor(ms / 1000);
+    const p = n => String(n).padStart(2, "0");
+    return p(Math.floor(s / 3600)) + ":" + p(Math.floor(s / 60) % 60) + ":" + p(s % 60);
+}
+
+function updateClock(){
+    if (clockMode === "time") {
+        clockEl.textContent = hhmmss();
+    } else {
+        clockEl.textContent = "⏱ 已上 " + fmtElapsed(Date.now() - pageLoadTime);
+    }
+}
+
+clockEl.addEventListener("click", () => {
+    clockMode = (clockMode === "time") ? "elapsed" : "time";
+    updateClock();
+});
+
+setInterval(updateClock, 1000);
+updateClock();
+
+/* ================= 按钮 ================= */
+
+btnFocus.addEventListener("click", () => toggleFocus());
+btnEn.addEventListener("click", () => toggleEn());
+document.getElementById("btnFontDown").addEventListener("click", () => changeFont(-2));
+document.getElementById("btnFontUp").addEventListener("click", () => changeFont(2));
+btnFull.addEventListener("click", toggleFullscreen);
+btnClear.addEventListener("click", clearSubtitles);
+
+function openHelp(){
+    helpOverlay.hidden = false;
+    helpClose.focus();
+}
+
+function closeHelp(){
+    helpOverlay.hidden = true;
+}
+
+document.getElementById("btnHelp").addEventListener("click", openHelp);
+helpClose.addEventListener("click", closeHelp);
+helpOverlay.addEventListener("click", (e) => {
+    if (e.target === helpOverlay) closeHelp();
+});
+
+/* ================= 键盘 ================= */
+
+document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    switch (e.key) {
+        case "f": case "F": toggleFullscreen(); break;
+        case "z": case "Z": toggleFocus(); break;
+        case "e": case "E": toggleEn(); break;
+        case "c": case "C": clearSubtitles(); break;
+        case "=": case "+": changeFont(2); break;
+        case "-": case "_": changeFont(-2); break;
+        case "?":
+            if (helpOverlay.hidden) openHelp(); else closeHelp();
+            break;
+        case "Escape":
+            closeHelp();
+            break;
+        case "ArrowUp": case "PageUp":
+            historyEl.scrollBy({ top: -320, behavior: "smooth" });
+            break;
+        case "ArrowDown": case "PageDown":
+            if (isNearBottom()) {
+                stickToBottom = true;
+                scrollBottom();
+            } else {
+                historyEl.scrollBy({ top: 320, behavior: "smooth" });
+            }
+            break;
+    }
+});
+
+/* ================= 启动 ================= */
+
+// 恢复设置：URL 参数优先，其次 localStorage
+applyURLParams();
+try {
+    const saved = parseInt(localStorage.getItem("rtFont"), 10);
+    if (saved >= MIN_FONT && saved <= MAX_FONT && currentFont() === DEFAULT_FONT) {
+        setFont(saved);
+    }
+    if (localStorage.getItem("rtNoEn") === "1" && !document.body.classList.contains("noen")) {
+        toggleEn(true);
+    }
+} catch (e) {}
+
+connect();
+</script>
+</body>
+</html>

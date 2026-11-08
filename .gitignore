@@ -1,0 +1,14 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.idea/
+.vscode/
+.env
+.env.*
+models/
+subtitles/
+logs/
+selected_device.txt
+.backup*/
+.pytest_cache/
