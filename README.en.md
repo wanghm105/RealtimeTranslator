@@ -1,6 +1,6 @@
 # RealtimeTranslator
 
-[简体中文](README.md) | English
+[English homepage](README.md) | [简体中文](README.zh-CN.md)
 
 RealtimeTranslator is a Windows classroom captioning prototype. It transcribes English speech and displays the English text alongside a Chinese translation in your browser. The project uses existing speech recognition and language models; it does not train a new model.
 
@@ -10,12 +10,32 @@ Microphone / supported loopback input
   -> sentence merging -> Qwen translation -> WebSocket -> browser captions
 ```
 
-## Features
+## Classroom features
 
-- Shows partial English captions and streams the Chinese translation. Recent captions reappear after a browser refresh.
-- Keeps the translation queue bounded so newer captions take priority when translation falls behind. Some captions may be dropped under load.
-- Lets you adjust sentence merging, terminology, model selection and local caption saving.
-- Includes an optional NLLB translation path that requires separately prepared model files.
+- Capture speech from a microphone or a supported system-audio loopback device.
+- Show partial English transcription as speech arrives, then stream the Chinese translation alongside the completed sentence.
+- Follow new captions automatically, pause following when you scroll up, and return to the latest sentence with one click.
+- Restore recent caption history after a refresh and reconnect the browser when the connection drops.
+- Use full-screen and focus modes, change the font size, and show or hide the English text. The page also includes keyboard shortcuts.
+- Save session captions locally and use a glossary to guide translation of course terminology.
+
+## How it works
+
+1. **Capture and segment audio.** The application takes microphone or loopback audio and uses voice activity detection to identify speech and pauses.
+2. **Transcribe speech.** faster-whisper produces a live English preview and transcribes completed speech segments. Recognition settings can be adjusted in `config.py`.
+3. **Merge fragments.** A sentence merger holds incomplete fragments, including those ending in an ellipsis, and combines them with later speech within configurable word and time limits.
+4. **Translate and display.** Qwen streams Chinese text while WebSocket messages deliver updates to the browser. Sentence sequence numbers keep translation updates matched with their English text.
+5. **Keep the view responsive.** A bounded translation queue gives newer captions priority if translation falls behind. The server retains recent history for a refreshed browser, and the interface follows new content unless the reader has scrolled up.
+
+## Design and development
+
+The project grew out of using live captions in class, where a useful result needs to be readable during a lecture as well as reasonably responsive. The implementation separates audio capture, speech recognition, sentence merging, translation and display so each stage can be tuned independently.
+
+- **Sentence boundaries:** Pauses in speech do not always mark the end of a sentence. The merger waits for more context when a fragment looks incomplete, with configurable limits to avoid waiting indefinitely.
+- **Latency and workload:** English can appear while the translation model is loading. Once translation starts, the application streams updates and bounds the translation queue to limit how far captions fall behind.
+- **Hardware-aware model selection:** The application can select a Qwen model using available GPU power and memory. The project also supports an optional NLLB translation path with separately prepared model files.
+- **Model experiments:** During development, I compared Qwen 8-bit and FP16 inference on my Windows setup and chose FP16 for that environment. I also tried faster-whisper compute settings and adjusted decoding parameters to reduce repeated or hallucinated text. These observations depend on the hardware, models and workload.
+- **Classroom interface:** I refined the scrolling behavior so users can read earlier captions without being pulled back to the bottom, while new and streaming text continues to follow when the viewer is at the latest caption.
 
 ## Requirements and setup
 
